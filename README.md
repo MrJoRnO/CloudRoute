@@ -10,3 +10,4 @@
 - **Dockerfile:** Multi-stage build for a small footprint.
 - **Security:** Running as a non-root user (`appuser`).
 - **Base Image:** `python:3.9-slim`.
+
