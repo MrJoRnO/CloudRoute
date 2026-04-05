@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI Pipeline
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  deploy:
+  ci-lifecycle:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -18,7 +18,30 @@ jobs:
         with:
           fetch-depth: '0'
 
-      # --- Tags Manager ---
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r app/requirements.txt
+          pip install flake8 pytest pytest-cov
+
+      # --- Static Code Analysis (Linting) ---
+      - name: Run Linting
+        run: |
+          # Quality Gate
+          flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      # --- Unit Tests & Coverage (Quality Gate 1) ---
+      - name: Run Unit Tests
+        run: |
+          # Quality Gate
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/app
+          pytest app/test_main.py --cov=app --cov-fail-under=80
+
+      # --- (Semantic + SHA) ---
       - name: Bump version and push tag
         id: tag_version
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -30,36 +53,33 @@ jobs:
           WITH_V: false
           MAJOR_STRING_TOKEN: "#MAJOR"
           MINOR_STRING_TOKEN: "#MINOR"
-          PATCH_STRING_TOKEN: "#PATCH"
 
-      # --- (Semantic + SHA) ---
-      - name: Prepare Combined Tag
+      - name: Prepare Tag
         id: vars
         run: |
-          # SHA
           SHA=$(echo ${GITHUB_SHA} | cut -c1-7)
-          
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             echo "tag=pr-${{ github.event.number }}-${SHA}" >> $GITHUB_OUTPUT
           else
-            VERSION="${{ steps.tag_version.outputs.new_tag }}"
-            echo "tag=${VERSION}-${SHA}" >> $GITHUB_OUTPUT
+            echo "tag=${{ steps.tag_version.outputs.new_tag }}-${SHA}" >> $GITHUB_OUTPUT
           fi
 
-      # --- Docker Build ---
+      # --- Build Docker Image ---
       - name: Build Docker Image
-        run: |
-          IMAGE_NAME="url-shortener"
-          FINAL_TAG="${{ steps.vars.outputs.tag }}"
-          
-          echo "Building image with tag: $FINAL_TAG"
-          docker build -t $IMAGE_NAME:$FINAL_TAG .
+        run: docker build -t url-shortener:${{ steps.vars.outputs.tag }} .
 
-      # --- Security Scan ---
+      # --- Security Scan (Quality Gate 2) ---
       - name: Scan Image (Trivy)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'url-shortener:${{ steps.vars.outputs.tag }}'
           format: 'table'
-          exit-code: '1'
+          exit-code: '1' # Quality Gate
           severity: 'CRITICAL,HIGH'
+
+      # # --- Push to Registry (Main) ---
+      # - name: Push Image
+      #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      #   run: |
+      #     echo "Pushing image to registry with tag ${{ steps.vars.outputs.tag }}..."
+      #     # docker push my-registry/url-shortener:${{ steps.vars.outputs.tag }}
