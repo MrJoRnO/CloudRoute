@@ -2,27 +2,22 @@ FROM python:3.9-alpine AS builder
 RUN apk add --no-cache gcc musl-dev libffi-dev
 WORKDIR /app
 
-RUN mkdir -p /app/deps
-
-RUN pip install --target=/app/deps --no-cache-dir \
-    setuptools==78.1.1 \
-    wheel==0.46.2 \
-    jaraco.context==6.1.0
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 COPY app/requirements.txt .
+RUN pip install --no-cache-dir --target=/app/deps -r requirements.txt
 
-RUN pip install --target=/app/deps --no-cache-dir -r requirements.txt
+RUN rm -rf /app/deps/wheel* /app/deps/setuptools* /app/deps/pkg_resources*
 
 FROM python:3.9-alpine
 WORKDIR /app
-RUN apk upgrade --no-cache
-RUN addgroup -S appuser && adduser -S appuser -G appuser
 
-COPY --from=builder /app/deps /app/deps
-COPY app/ .
+RUN apk upgrade --no-cache && \
+    addgroup -S appuser && adduser -S appuser -G appuser
 
-ENV PYTHONPATH="/app/deps"
+COPY --from=builder /app/deps /usr/local/lib/python3.9/site-packages
+COPY app/main.py .
+
 USER appuser
-
 EXPOSE 5000
 CMD ["python", "main.py"]
