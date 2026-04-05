@@ -5,6 +5,3 @@ itsdangerous==2.1.2
 click==8.1.7
 MarkupSafe==2.1.5
 blinker==1.7.0
-wheel==0.46.2
-jaraco.context==6.1.0
-setuptools==70.0.0
