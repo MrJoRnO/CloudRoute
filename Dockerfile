@@ -1,8 +1,9 @@
 FROM python:3.9-alpine AS builder
-
 RUN apk add --no-cache gcc musl-dev libffi-dev
 WORKDIR /app
 COPY app/requirements.txt .
+# עדכון כלי ההתקנה עצמם
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip install --target=/app/deps -r requirements.txt
 
 FROM python:3.9-alpine
