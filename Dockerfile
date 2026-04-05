@@ -2,8 +2,10 @@ FROM python:3.9-alpine AS builder
 RUN apk add --no-cache gcc musl-dev libffi-dev
 WORKDIR /app
 COPY app/requirements.txt .
-# עדכון כלי ההתקנה עצמם
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# עדכון כלי הבנייה לגרסאות מאובטחות לפי הדו"ח של Trivy
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel==0.46.2 jaraco.context==6.1.0
+
 RUN pip install --target=/app/deps -r requirements.txt
 
 FROM python:3.9-alpine
