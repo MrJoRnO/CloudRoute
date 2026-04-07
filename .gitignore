@@ -1,0 +1,10 @@
+# התעלמות מתיקיות התקנה של טרפורם
+.terraform/
+*.terraform.lock.hcl
+
+# התעלמות מקבצי State מקומיים (כי אנחנו משתמשים ב-S3)
+*.tfstate
+*.tfstate.backup
+
+# התעלמות מקבצי משתנים רגישים
+*.tfvars
