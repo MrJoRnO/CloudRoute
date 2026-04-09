@@ -21,12 +21,10 @@ module "app_secrets" {
   secret_name = "${var.cluster_name}-db-pass"
   tags        = local.common_tags
 }
-# קריאה למודול ה-EKS המקומי
 module "kubernetes" {
   source = "./modules/eks"
 
   cluster_name = var.cluster_name
-  # החיבור הקריטי: לוקח את הפלט של מודול הרשת ומעביר אותו לקלאסטר
   vpc_id       = module.network.vpc_id
   subnet_ids   = module.network.private_subnets
   admin_ip     = var.admin_ip
