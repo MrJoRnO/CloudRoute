@@ -124,7 +124,7 @@ jobs:
         id: get_ip
         run: |
           # משיכת ה-IP הציבורי של המכונה הנוכחית
-          PUBLIC_IP=$(curl -s https://ifconfig.me)
+          export PUBLIC_IP=$(curl -s https://ifconfig.me)
           echo "RUNNER_IP=${PUBLIC_IP}/32" >> $GITHUB_ENV  
  
       - name: Debug IP
@@ -136,6 +136,8 @@ jobs:
           terraform_version: 1.5.0
         
       - name: Terraform Init & Apply
+        env:
+          TF_VAR_admin_ip: ${{ env.RUNNER_IP }}
         run: |
           cd terraform
           terraform init
