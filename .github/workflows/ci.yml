@@ -159,9 +159,10 @@ jobs:
       - name: Install Secrets Store CSI Driver
         run: |
           aws eks update-kubeconfig --region eu-central-1 --name url-shortener-secure
-         
-          kubectl annotate sa secrets-store-csi-driver -n kube-system meta.helm.sh/release-name- meta.helm.sh/release-namespace- --overwrite || true
-          kubectl label sa secrets-store-csi-driver -n kube-system app.kubernetes.io/managed-by- --overwrite || true
+          
+          kubectl delete secret -n kube-system -l owner=helm,name=csi-secrets-store || true
+          kubectl delete secret -n kube-system -l owner=helm,name=secrets-provider-aws
+          kubectl delete sa secrets-store-csi-driver -n kube-system || true
           
           helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts --force-update
           helm repo add aws-secrets-manager https://aws.github.io/secrets-store-csi-driver-provider-aws --force-update
