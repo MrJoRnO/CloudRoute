@@ -180,7 +180,10 @@ jobs:
         run: |
           aws eks update-kubeconfig --region eu-central-1 --name url-shortener-secure
           
-          # שים לב לשינוי ב-image.repository - מחברים את ה-registry וה-repo
+          echo "Checking for pending Helm operations..."
+          helm rollback staging-app 0 --namespace staging || echo "No pending operations to rollback"
+          
+          
           helm upgrade --install staging-app ./helm/url-shortener \
             -f ./helm/url-shortener/values.yaml \
             -f ./helm/url-shortener/values-staging.yaml \
