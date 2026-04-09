@@ -18,12 +18,15 @@ module "ecr" {
 }
 module "app_secrets" {
   source      = "./modules/secrets"
-  secret_name = "${var.cluster_name}-db-pass-v7"
+  secret_name = "${var.cluster_name}-db-pass-v8"
   tags        = local.common_tags
 }
 module "kubernetes" {
   source = "./modules/eks"
-
+  providers = {
+    kubernetes = kubernetes
+    helm       = helm
+  }
   cluster_name = var.cluster_name
   vpc_id       = module.network.vpc_id
   subnet_ids   = module.network.private_subnets
