@@ -125,10 +125,7 @@ jobs:
         run: |
           # משיכת ה-IP הציבורי של המכונה הנוכחית
           export PUBLIC_IP=$(curl -s https://ifconfig.me)
-          echo "RUNNER_IP=${PUBLIC_IP}/32" >> $GITHUB_ENV  
- 
-      - name: Debug IP
-        run: echo "The IP being passed to Terraform is $TF_VAR_admin_ip"
+          echo "RUNNER_IP=${PUBLIC_IP}/32" >> $GITHUB_ENV
  
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -139,8 +136,12 @@ jobs:
         env:
           TF_VAR_admin_ip: ${{ env.RUNNER_IP }}
         run: |
+          echo "The IP being passed to Terraform is $TF_VAR_admin_ip"
           cd terraform
-          terraform init
+          terraform init \
+            -backend-config="bucket=noam-terraform-state-bucket" \
+            -backend-config="key=eks/terraform.tfstate" \
+            -backend-config="region=eu-central-1"
           terraform apply -auto-approve
 
 
