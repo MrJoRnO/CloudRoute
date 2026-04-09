@@ -118,7 +118,15 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-        
+      
+   
+      - name: Get GitHub Runner Public IP
+        id: get_ip
+        run: |
+          # משיכת ה-IP הציבורי של המכונה הנוכחית
+          PUBLIC_IP=$(curl -s https://ifconfig.me)
+          echo "RUNNER_IP=${PUBLIC_IP}/32" >> $GITHUB_ENV  
+ 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
