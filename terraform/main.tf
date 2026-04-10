@@ -18,7 +18,7 @@ module "ecr" {
 }
 module "app_secrets" {
   source      = "./modules/secrets"
-  secret_name = "${var.cluster_name}-db-pass-v19"
+  secret_name = "${var.cluster_name}-db-pass-v21"
   tags        = local.common_tags
 }
 module "kubernetes" {

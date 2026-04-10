@@ -1,11 +1,25 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.0"
+    }
+  }
+}
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.0" # עדכון לגרסה 20 שתומכת ב-Providers החדשים
-  providers = {
-    kubernetes = kubernetes
-  }
+  
   cluster_name    = var.cluster_name
-  cluster_version = "1.32" 
+  cluster_version = "1.33" 
 
   # בגרסה 20 הפרמטרים מעט שונים:
   vpc_id     = var.vpc_id
@@ -25,7 +39,7 @@ module "eks" {
       max_size       = 3
       desired_size   = 2
 
-      ami_type = "AL2_x86_64"
+      ami_type = "AL2023_x86_64_STANDARD"
     }
   }
 }
