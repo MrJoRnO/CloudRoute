@@ -101,7 +101,7 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, feature/initial-setup ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
