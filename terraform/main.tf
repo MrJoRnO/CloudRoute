@@ -19,7 +19,7 @@ module "ecr" {
 }
 module "app_secrets" {
   source      = "./modules/secrets"
-  secret_name = "${local.prefix}-db-pass-v24"
+  secret_name = "${local.prefix}-db-pass-v25"
   tags        = local.common_tags
 }
 module "kubernetes" {
