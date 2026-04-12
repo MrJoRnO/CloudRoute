@@ -164,7 +164,14 @@ jobs:
 
       - name: Install Secrets Store CSI Driver
         run: |
-          aws eks update-kubeconfig --region eu-central-1 --name url-shortener-secure
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            CLUSTER_NAME="url-shortener-prod"
+          else
+            CLUSTER_NAME="url-shortener-stage"
+          fi
+          
+          echo "Connecting to cluster: $CLUSTER_NAME"
+          aws eks update-kubeconfig --region eu-central-1 --name $CLUSTER_NAME
                     
           helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts --force-update
           helm repo update
@@ -192,12 +199,12 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Update Kubeconfig
-        run: aws eks update-kubeconfig --region eu-central-1 --name url-shortener-secure
+        run: aws eks update-kubeconfig --region eu-central-1 --name url-shortener-stage
 
       - name: Deploy to Staging with Helm
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ github.ref == 'refs/heads/main' && 'url-shortener-prod-repo' || 'url-shortener-stage-repo' }}
+          ECR_REPOSITORY: url-shortener-stage-repo
         run: |
           helm upgrade --install staging-app ./helm/url-shortener \
             -f ./helm/url-shortener/values.yaml \
@@ -226,12 +233,12 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Update Kubeconfig
-        run: aws eks update-kubeconfig --region eu-central-1 --name url-shortener-secure
+        run: aws eks update-kubeconfig --region eu-central-1 --name url-shortener-prod
 
       - name: Deploy to Production with Helm
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: url-shortener-repo
+          ECR_REPOSITORY: url-shortener-prod-repo
         run: |
           helm upgrade --install prod-app ./helm/url-shortener \
             -f ./helm/url-shortener/values.yaml \
