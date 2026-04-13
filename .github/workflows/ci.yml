@@ -104,8 +104,15 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+
+# הרשאות נדרשות עבור OIDC - קריטי לכל ה-Jobs
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   build-and-deploy-infra:
+    name: Build & Infrastructure
     runs-on: ubuntu-latest
     outputs:
       ecr_registry: ${{ steps.login-ecr.outputs.registry }}
@@ -113,18 +120,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4 
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4 
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-eks-deployer
           aws-region: eu-central-1
-      
-      - name: Get GitHub Runner Public IP
-        id: get_ip
-        run: |
-          export PUBLIC_IP=$(curl -s https://ifconfig.me)
-          echo "RUNNER_IP=${PUBLIC_IP}/32" >> $GITHUB_ENV
  
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3 
@@ -132,17 +132,18 @@ jobs:
           terraform_version: 1.7.0
         
       - name: Terraform Init & Workspace & Apply
-        env:
-          TF_VAR_admin_ip: ${{ env.RUNNER_IP }}
         run: |
           cd terraform
           terraform init
+          
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             WORKSPACE="prod"
           else
             WORKSPACE="stage"
           fi
+          
           terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+          # אין יותר צורך ב-TF_VAR_admin_ip כי ה-OIDC נכנס דרך ה-IAM Role
           terraform apply -auto-approve
 
       - name: Login to Amazon ECR
@@ -183,39 +184,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-eks-deployer
           aws-region: eu-central-1
-
-      - name: Authorize Runner IP in Security Group
-        run: |
-          RUNNER_IP=$(curl -s https://ifconfig.me)
-          echo "RUNNER_IP=${RUNNER_IP}"
-          CLUSTER_NAME="url-shortener-stage"
-
-          SG_ID=$(aws ec2 describe-security-groups \
-            --filters "Name=tag:kubernetes.io/cluster/$CLUSTER_NAME,Values=owned" \
-            --query "SecurityGroups[0].GroupId" --output text)
-
-          if [ "$SG_ID" == "None" ] || [ -z "$SG_ID" ]; then
-            SG_ID=$(aws ec2 describe-security-groups \
-              --filters "Name=group-name,Values=*$CLUSTER_NAME*cluster*" \
-              --query "SecurityGroups[0].GroupId" --output text)
-          fi
-
-          echo "Detected SG ID: $SG_ID"
-
-          if [ "$SG_ID" != "None" ] && [ -n "$SG_ID" ]; then
-            aws ec2 authorize-security-group-ingress \
-              --group-id $SG_ID --protocol tcp --port 443 --cidr ${RUNNER_IP}/32 || echo "Already authorized"
-          else
-            echo "Error: Could not find any SG for cluster $CLUSTER_NAME"
-            exit 1
-          fi
-
 
       - name: Update Kubeconfig
         run: aws eks update-kubeconfig --region eu-central-1 --name url-shortener-stage
@@ -233,56 +206,33 @@ jobs:
             --namespace staging \
             --create-namespace --wait --timeout 5m
 
-      - name: Revoke Runner IP (Cleanup)
-        if: always()
-        run: |
-          RUNNER_IP=$(curl -s https://ifconfig.me)
-          CLUSTER_NAME="url-shortener-stage"
-          
-          SG_ID=$(aws ec2 describe-security-groups \
-            --filters "Name=tag:kubernetes.io/cluster/$CLUSTER_NAME,Values=owned" \
-            --query "SecurityGroups[0].GroupId" --output text)
-
-          if [ "$SG_ID" == "None" ] || [ -z "$SG_ID" ]; then
-            SG_ID=$(aws ec2 describe-security-groups \
-              --filters "Name=group-name,Values=*$CLUSTER_NAME*cluster*" \
-              --query "SecurityGroups[0].GroupId" --output text)
-          fi
-          
-          if [ "$SG_ID" != "None" ] && [ -n "$SG_ID" ]; then
-            echo "Revoking access for $RUNNER_IP from SG $SG_ID"
-            aws ec2 revoke-security-group-ingress --group-id $SG_ID --protocol tcp --port 443 --cidr ${RUNNER_IP}/32 || true
-          fi
   deploy-prod:
     name: Deploy to Production
     needs: build-and-deploy-infra
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-eks-deployer
+          aws-region: eu-central-1
 
       - name: Update Kubeconfig
         run: aws eks update-kubeconfig --region eu-central-1 --name url-shortener-prod
 
       - name: Deploy to Production with Helm
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: url-shortener-prod-repo
         run: |
+          REGISTRY=${{ needs.build-and-deploy-infra.outputs.ecr_registry }}
+          REPOSITORY="url-shortener-prod-repo"
+          
           helm upgrade --install prod-app ./helm/url-shortener \
             -f ./helm/url-shortener/values.yaml \
             -f ./helm/url-shortener/values-production.yaml \
-            --set image.repository=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }} \
-            --set image.tag=${{ github.sha }}
+            --set image.repository=$REGISTRY/$REPOSITORY \
+            --set image.tag=${{ github.sha }} \
             --namespace prod \
-            --create-namespace \
-            --wait --timeout 5m        
+            --create-namespace --wait --timeout 5m      
