@@ -30,6 +30,17 @@ module "eks" {
   cluster_endpoint_public_access_cidrs = null
   enable_cluster_creator_admin_permissions = true
   
+  cluster_security_group_additional_rules = {
+    ingress_admin_ip = {
+      description = "Allow Runner IP to communicate with API Server"
+      protocol    = "tcp"
+      from_port   = 443
+      to_port     = 443
+      type        = "ingress"
+      cidr_blocks = [var.admin_ip] 
+    }
+  }
+  
   eks_managed_node_groups = {
     main = {
       instance_types = var.instance_types 
