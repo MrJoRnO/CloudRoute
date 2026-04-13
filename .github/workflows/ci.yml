@@ -105,7 +105,6 @@ on:
   pull_request:
     branches: [ main ]
 
-# הרשאות נדרשות עבור OIDC - קריטי לכל ה-Jobs
 permissions:
   id-token: write
   contents: read
@@ -125,7 +124,13 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-eks-deployer
           aws-region: eu-central-1
- 
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: 'true'
+          
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3 
         with:
@@ -144,12 +149,6 @@ jobs:
           
           terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
           terraform apply -auto-approve
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          mask-password: 'true'
 
       - name: Build and Push Docker Image
         env:
@@ -194,7 +193,7 @@ jobs:
 
       - name: Deploy to Staging with Helm
         run: |
-          REGISTRY=${{ needs.build-and-deploy-infra.outputs.ecr_registry }}
+          REGISTRY="${{ needs.build-and-deploy-infra.outputs.ecr_registry }}"
           REPOSITORY="url-shortener-stage-repo"
           
           helm upgrade --install staging-app ./helm/url-shortener \
