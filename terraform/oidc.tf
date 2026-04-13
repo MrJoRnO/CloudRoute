@@ -10,7 +10,7 @@ module "github_oidc_role" {
   name = "github-actions-eks-deployer"
 
   subjects = [
-    "repo:noam-journo/url-shortener-infra:*" 
+    "repo:MrJoRnO/CloudRoute:*" 
   ]
 
   policies = {
