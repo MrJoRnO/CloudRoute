@@ -143,7 +143,6 @@ jobs:
           fi
           
           terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
-          # אין יותר צורך ב-TF_VAR_admin_ip כי ה-OIDC נכנס דרך ה-IAM Role
           terraform apply -auto-approve
 
       - name: Login to Amazon ECR
