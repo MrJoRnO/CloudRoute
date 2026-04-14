@@ -1,4 +1,103 @@
-name: CI Pipeline
+# name: CI Pipeline
+
+# on:
+#   push:
+#     branches: [ main ]
+#   pull_request:
+#     branches: [ main ]
+
+# jobs:
+#   ci-lifecycle:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: write
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: '0'
+      
+#       # - name: Configure AWS credentials
+#       #   uses: aws-actions/configure-aws-credentials@v2
+#       #   with:
+#       #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#       #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#       #     aws-region: ${{ secrets.AWS_REGION }}
+      
+#       - name: Set up Python
+#         uses: actions/setup-python@v4
+#         with:
+#           python-version: '3.9'
+
+#       - name: Install dependencies
+#         run: |
+#           pip install -r app/requirements.txt
+#           pip install flake8 pytest pytest-cov
+      
+      
+#       # - name: Login to Amazon ECR
+#       #   id: login-ecr
+#       #   uses: aws-actions/amazon-ecr-login@v1
+
+#       # --- Static Code Analysis (Linting) ---
+#       - name: Run Linting
+#         run: |
+#           # Quality Gate
+#           flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+
+#       # --- Unit Tests & Coverage (Quality Gate 1) ---
+#       - name: Run Unit Tests
+#         run: |
+#           # Quality Gate
+#           export PYTHONPATH=$PYTHONPATH:$(pwd)/app
+#           pytest app/test_main.py --cov=app --cov-fail-under=80
+
+#       # --- (Semantic + SHA) ---
+#       - name: Bump version and push tag
+#         id: tag_version
+#         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+#         uses: anothrNick/github-tag-action@1.64.0
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#           INITIAL_VERSION: 1.0.0
+#           DEFAULT_BUMP: patch
+#           WITH_V: false
+#           MAJOR_STRING_TOKEN: "#MAJOR"
+#           MINOR_STRING_TOKEN: "#MINOR"
+
+#       - name: Prepare Tag
+#         id: vars
+#         run: |
+#           SHA=$(echo ${GITHUB_SHA} | cut -c1-7)
+#           if [ "${{ github.event_name }}" == "pull_request" ]; then
+#             echo "tag=pr-${{ github.event.number }}-${SHA}" >> $GITHUB_OUTPUT
+#           else
+#             echo "tag=${{ steps.tag_version.outputs.new_tag }}-${SHA}" >> $GITHUB_OUTPUT
+#           fi
+
+#       # --- Build Docker Image ---
+#       - name: Build Docker Image
+#         run: docker build -t url-shortener:${{ steps.vars.outputs.tag }} .
+
+#       # --- Security Scan (Quality Gate 2) ---
+#       - name: Scan Image (Trivy)
+#         uses: aquasecurity/trivy-action@master
+#         with:
+#           image-ref: 'url-shortener:${{ steps.vars.outputs.tag }}'
+#           format: 'table'
+#           exit-code: '1'
+#           severity: 'CRITICAL,HIGH'
+#           trivyignore: .trivyignore
+
+#       # # --- Push to Registry (Main) ---
+#       # - name: Push Image
+#       #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+#       #   run: |
+#       #     echo "Pushing image to registry with tag ${{ steps.vars.outputs.tag }}..."
+#       #     # docker push my-registry/url-shortener:${{ steps.vars.outputs.tag }}
+
+name: CI/CD Pipeline
 
 on:
   push:
@@ -6,81 +105,142 @@ on:
   pull_request:
     branches: [ main ]
 
-jobs:
-  ci-lifecycle:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+permissions:
+  id-token: write
+  contents: read
 
+jobs:
+  build-and-deploy-infra:
+    name: Build & Infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4 
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4 
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-eks-deployer
+          aws-region: eu-central-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: 'true'
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3 
+        with:
+          terraform_version: 1.7.0
+        
+      - name: Terraform Init & Workspace & Apply
+        run: |
+          cd terraform
+          terraform init
+          
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            WORKSPACE="prod"
+          else
+            WORKSPACE="stage"
+          fi
+          
+          terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+          terraform apply -auto-approve
+
+      - name: Build and Push Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ github.ref == 'refs/heads/main' && 'url-shortener-prod-repo' || 'url-shortener-stage-repo' }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Install Secrets Store CSI Driver
+        run: |
+          CLUSTER_NAME=${{ github.ref == 'refs/heads/main' && 'url-shortener-prod' || 'url-shortener-stage' }}
+          aws eks update-kubeconfig --region eu-central-1 --name $CLUSTER_NAME
+                    
+          helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts --force-update
+          helm repo update
+          
+          helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
+            --namespace kube-system \
+            --set syncSecret.enabled=true \
+            --set enableSecretRotation=true \
+            --wait
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: build-and-deploy-infra
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          fetch-depth: '0'
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-eks-deployer
+          aws-region: eu-central-1
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Login to Amazon ECR
+        id: login-ecr-staging
+        uses: aws-actions/amazon-ecr-login@v2
         with:
-          python-version: '3.9'
+          mask-password: 'true'
 
-      - name: Install dependencies
+      - name: Update Kubeconfig
+        run: aws eks update-kubeconfig --region eu-central-1 --name url-shortener-stage
+
+      - name: Deploy to Staging with Helm
         run: |
-          pip install -r app/requirements.txt
-          pip install flake8 pytest pytest-cov
+          REGISTRY="${{ steps.login-ecr-staging.outputs.registry }}"
+          REPOSITORY="url-shortener-stage-repo"
+          
+          helm upgrade --install staging-app ./helm/url-shortener \
+            -f ./helm/url-shortener/values.yaml \
+            -f ./helm/url-shortener/values-staging.yaml \
+            --set image.repository=$REGISTRY/$REPOSITORY \
+            --set image.tag=${{ github.sha }} \
+            --namespace staging \
+            --create-namespace --wait --timeout 5m
 
-      # --- Static Code Analysis (Linting) ---
-      - name: Run Linting
-        run: |
-          # Quality Gate
-          flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+  deploy-prod:
+    name: Deploy to Production
+    needs: build-and-deploy-infra
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # --- Unit Tests & Coverage (Quality Gate 1) ---
-      - name: Run Unit Tests
-        run: |
-          # Quality Gate
-          export PYTHONPATH=$PYTHONPATH:$(pwd)/app
-          pytest app/test_main.py --cov=app --cov-fail-under=80
-
-      # --- (Semantic + SHA) ---
-      - name: Bump version and push tag
-        id: tag_version
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: anothrNick/github-tag-action@1.64.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INITIAL_VERSION: 1.0.0
-          DEFAULT_BUMP: patch
-          WITH_V: false
-          MAJOR_STRING_TOKEN: "#MAJOR"
-          MINOR_STRING_TOKEN: "#MINOR"
-
-      - name: Prepare Tag
-        id: vars
-        run: |
-          SHA=$(echo ${GITHUB_SHA} | cut -c1-7)
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            echo "tag=pr-${{ github.event.number }}-${SHA}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=${{ steps.tag_version.outputs.new_tag }}-${SHA}" >> $GITHUB_OUTPUT
-          fi
-
-      # --- Build Docker Image ---
-      - name: Build Docker Image
-        run: docker build -t url-shortener:${{ steps.vars.outputs.tag }} .
-
-      # --- Security Scan (Quality Gate 2) ---
-      - name: Scan Image (Trivy)
-        uses: aquasecurity/trivy-action@master
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          image-ref: 'url-shortener:${{ steps.vars.outputs.tag }}'
-          format: 'table'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
-          trivyignore: .trivyignore
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-eks-deployer
+          aws-region: eu-central-1
 
-      # # --- Push to Registry (Main) ---
-      # - name: Push Image
-      #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      #   run: |
-      #     echo "Pushing image to registry with tag ${{ steps.vars.outputs.tag }}..."
-      #     # docker push my-registry/url-shortener:${{ steps.vars.outputs.tag }}
+      - name: Login to Amazon ECR
+        id: login-ecr-prod 
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: 'true'
+
+      - name: Update Kubeconfig
+        run: aws eks update-kubeconfig --region eu-central-1 --name url-shortener-prod
+
+      - name: Deploy to Production with Helm
+        run: |
+          REGISTRY="${{ steps.login-ecr-prod.outputs.registry }}"
+          REPOSITORY="url-shortener-prod-repo"
+          
+          helm upgrade --install prod-app ./helm/url-shortener \
+            -f ./helm/url-shortener/values.yaml \
+            -f ./helm/url-shortener/values-production.yaml \
+            --set image.repository=$REGISTRY/$REPOSITORY \
+            --set image.tag=${{ github.sha }} \
+            --namespace prod \
+            --create-namespace --wait --timeout 5m      

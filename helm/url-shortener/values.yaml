@@ -1,11 +1,17 @@
 replicaCount: 1
 image:
-  repository: url-shortener
-  pullPolicy: IfNotPresent
-  tag: "" # Overridden by CI
+  repository: 194636597980.dkr.ecr.eu-central-1.amazonaws.com/url-shortener-repo
+  pullPolicy: Always 
+  tag: "latest"
+
+secrets:
+  enabled: true
+  name: "my-secure-shortener-db-pass" 
+
 service:
   type: ClusterIP
   port: 80
+
 resources:
   requests:
     cpu: 100m
@@ -13,5 +19,15 @@ resources:
   limits:
     cpu: 200m
     memory: 256Mi
+
 autoscaling:
   enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+
+probes:
+  liveness:
+    path: /health
+  readiness:
+    path: /health
