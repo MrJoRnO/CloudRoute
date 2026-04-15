@@ -4,7 +4,11 @@ module "github_oidc_role" {
   version = "~> 5.0"
 
   name = "github-actions-eks-deployer"
+  
+  audience = ["sts.amazonaws.com"]
+  
   subjects = ["repo:MrJoRnO/CloudRoute:*"]
+  
   policies = {
     Admin = "arn:aws:iam::aws:policy/AdministratorAccess"
   }
@@ -17,15 +21,15 @@ data "aws_iam_role" "github_role" {
 }
 
 resource "aws_eks_access_entry" "github_runner" {
-  cluster_name      = module.kubernetes.cluster_name 
-  principal_arn     = data.aws_iam_role.github_role.arn 
-  type              = "STANDARD"
+  cluster_name  = module.kubernetes.cluster_name
+  principal_arn = data.aws_iam_role.github_role.arn
+  type          = "STANDARD"
 }
 
 resource "aws_eks_access_policy_association" "github_runner_admin" {
   cluster_name  = module.kubernetes.cluster_name
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-  principal_arn = data.aws_iam_role.github_role.arn 
+  principal_arn = data.aws_iam_role.github_role.arn
 
   access_scope {
     type = "cluster"
