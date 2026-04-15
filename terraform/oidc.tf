@@ -1,4 +1,3 @@
-
 module "github_oidc_role" {
   count   = terraform.workspace == "stage" ? 1 : 0
   source  = "terraform-aws-modules/iam/aws//modules/iam-github-oidc-role"
@@ -19,7 +18,7 @@ data "aws_iam_role" "github_role" {
 
 resource "aws_eks_access_entry" "github_runner" {
   cluster_name      = module.kubernetes.cluster_name 
-  principal_arn     = data.aws_iam_role.github_role.arn # שינוי כאן
+  principal_arn     = data.aws_iam_role.github_role.arn 
   type              = "STANDARD"
 }
 
@@ -31,4 +30,14 @@ resource "aws_eks_access_policy_association" "github_runner_admin" {
   access_scope {
     type = "cluster"
   }
+}
+
+resource "aws_security_group_rule" "allow_eks_api_public" {
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = module.kubernetes.cluster_security_group_id
+  description       = "Allow public access to EKS API for GitHub OIDC"
 }
