@@ -20,16 +20,21 @@ module "github_oidc_role" {
   }
 }
 
+data "aws_iam_role" "github_role" {
+  name = "github-actions-eks-deployer"
+  depends_on = [module.github_oidc_role]
+}
+
 resource "aws_eks_access_entry" "github_runner" {
-  cluster_name      = module.kubernetes.cluster_name 
-  principal_arn     = module.github_oidc_role.arn
-  type              = "STANDARD"
+  cluster_name  = module.kubernetes.cluster_name
+  principal_arn = data.aws_iam_role.github_role.arn
+  type          = "STANDARD"
 }
 
 resource "aws_eks_access_policy_association" "github_runner_admin" {
   cluster_name  = module.kubernetes.cluster_name
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-  principal_arn = module.github_oidc_role.arn
+  principal_arn = data.aws_iam_role.github_role.arn
 
   access_scope {
     type = "cluster"
