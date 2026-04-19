@@ -177,21 +177,39 @@ jobs:
             -subj "/CN=url-shortener.local"
           kubectl create namespace istio-system --dry-run=client -o yaml | kubectl apply -f -
           kubectl create secret tls istio-ingressgateway-certs --key tls.key --cert tls.crt -n istio-system --dry-run=client -o yaml | kubectl apply -f -
+      
+      - name: Debug and Install Istio Gateway
+        run: |
+          # התקנה ללא המתנה
+          helm upgrade --install istio-ingressgateway istio/gateway -n istio-system \
+            --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
+            --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing" \
+            --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-nlb-target-type"="instance"
 
+          echo "Waiting 30 seconds for AWS to respond..."
+          sleep 30
+
+          echo "=== DESCRIBE SERVICE (The most important part) ==="
+          # הפקודה הזו תגיד לנו בדיוק למה ה-NLB לא נוצר
+          kubectl describe svc istio-ingressgateway -n istio-system
+          
+          echo "=== CHECKING FOR CONTROLLER ==="
+          kubectl get pods -n kube-system | grep aws-load-balancer      
+            
       - name: Install Istio & OAuth2 Proxy
         run: |
-          # Istio
-          helm repo add istio https://istio-release.storage.googleapis.com/charts
-          helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
-          helm repo update
-          helm upgrade --install istio-base istio/base -n istio-system --create-namespace
-          helm upgrade --install istiod istio/istiod -n istio-system --wait
-          helm upgrade --install istio-ingressgateway istio/gateway -n istio-system \
-            --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="external" \
-            --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-nlb-target-type"="instance" \
-            --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing" \
-            --wait --timeout 15m
-
+          # # Istio
+          # helm repo add istio https://istio-release.storage.googleapis.com/charts
+          # helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
+          # helm repo update
+          # helm upgrade --install istio-base istio/base -n istio-system --create-namespace
+          # helm upgrade --install istiod istio/istiod -n istio-system --wait
+          # helm upgrade --install istio-ingressgateway istio/gateway -n istio-system \
+          #   --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="external" \
+          #   --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-nlb-target-type"="instance" \
+          #   --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing" \
+          #   --wait --timeout 15m
+          
           # OAuth2 Proxy
           helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy \
             --namespace istio-system \
