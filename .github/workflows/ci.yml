@@ -189,7 +189,7 @@ jobs:
           helm upgrade --install istio-ingressgateway istio/gateway -n istio-system \
             --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
             --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing" \
-            --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-nlb-target-type"="instance"
+            --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-nlb-target-type"="instance" \
             --wait --timeout 15m
           
           # OAuth2 Proxy
