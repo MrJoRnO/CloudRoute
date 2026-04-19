@@ -201,7 +201,7 @@ jobs:
             --set extraArgs.provider=github \
             --set extraArgs.github-user="MrJoRnO" \
             --set extraArgs.upstream=file:///dev/null \
-            --set extraArgs.http-address=0.0.0.0:4180 --wait
+            --set extraArgs.http-address=0.0.0.0:4180 
 
       - name: Install Monitoring Stack
         run: |
