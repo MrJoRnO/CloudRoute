@@ -177,7 +177,11 @@ jobs:
           helm repo update
           helm upgrade --install istio-base istio/base -n istio-system --create-namespace
           helm upgrade --install istiod istio/istiod -n istio-system --wait
-          helm upgrade --install istio-ingressgateway istio/gateway -n istio-system --wait
+          helm upgrade --install istio-ingressgateway istio/gateway -n istio-system \
+            --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="external" \
+            --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-nlb-target-type"="instance" \
+            --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing" \
+            --wait
           
           # Prometheus & Grafana
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -218,7 +222,8 @@ jobs:
           REPOSITORY="url-shortener-stage-repo"
           
           LATEST_SECRET=$(aws secretsmanager list-secrets --query 'SecretList[?starts_with(Name, `url-shortener-stage-db-pass-`)].Name' --output text | tr '\t' '\n' | sort -V | tail -n 1)
-          
+          echo "Found latest secret: $LATEST_SECRET"
+
           helm upgrade --install staging-app ./helm/url-shortener \
             -f ./helm/url-shortener/values.yaml \
             -f ./helm/url-shortener/values-staging.yaml \
@@ -227,6 +232,21 @@ jobs:
             --set secrets.aws_secret_name=$LATEST_SECRET \
             --namespace staging \
             --create-namespace --wait --timeout 5m
+      
+      - name: Get NLB Address
+        run: |
+          echo "Waiting for NLB to provision..."
+          for i in {1..10}; do
+            LB_HOST=$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+            if [ -n "$LB_HOST" ]; then
+              echo "===================================================="
+              echo "🚀 YOUR NLB ADDRESS IS: $LB_HOST"
+              echo "===================================================="
+              break
+            fi
+            echo "Still waiting..."
+            sleep 15
+          done
 
   deploy-prod:
     name: Deploy to Production
@@ -270,3 +290,18 @@ jobs:
             --set secrets.aws_secret_name=$LATEST_SECRET \
             --namespace prod \
             --create-namespace --wait --timeout 5m
+      
+      - name: Get NLB Address
+        run: |                              
+          echo "Waiting for NLB to provision..."
+          for i in {1..10}; do
+            LB_HOST=$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+            if [ -n "$LB_HOST" ]; then
+              echo "===================================================="
+              echo "🚀 YOUR NLB ADDRESS IS: $LB_HOST"
+              echo "===================================================="
+              break
+            fi
+            echo "Still waiting..."
+            sleep 15
+          done
