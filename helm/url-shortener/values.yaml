@@ -6,11 +6,12 @@ image:
 
 secrets:
   enabled: true
-  name: "my-secure-shortener-db-pass" 
+  name: "url-shortener-stage-db-pass" 
 
 service:
   type: ClusterIP
   port: 80
+  targetPort: 8080
 
 resources:
   requests:

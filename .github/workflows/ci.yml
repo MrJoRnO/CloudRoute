@@ -169,6 +169,22 @@ jobs:
             --set enableSecretRotation=true \
             --wait
 
+      # --- ISTIO & MONITORING INSTALLATION ---
+      - name: Install Istio & Monitoring
+        run: |
+          # Istio
+          helm repo add istio https://istio-release.storage.googleapis.com/charts
+          helm repo update
+          helm upgrade --install istio-base istio/base -n istio-system --create-namespace
+          helm upgrade --install istiod istio/istiod -n istio-system --wait
+          helm upgrade --install istio-ingressgateway istio/gateway -n istio-system --wait
+          
+          # Prometheus & Grafana
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+          helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+            --namespace monitoring --create-namespace --wait
+
   deploy-staging:
     name: Deploy to Staging
     needs: build-and-deploy-infra
@@ -191,18 +207,24 @@ jobs:
           mask-password: 'true'
 
       - name: Update Kubeconfig
-        run: aws eks update-kubeconfig --region eu-central-1 --name url-shortener-stage
+        run: |
+          aws eks update-kubeconfig --region eu-central-1 --name url-shortener-stage
+          kubectl create namespace staging --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespace staging istio-injection=enabled --overwrite
 
       - name: Deploy to Staging with Helm
         run: |
           REGISTRY="${{ steps.login-ecr-staging.outputs.registry }}"
           REPOSITORY="url-shortener-stage-repo"
           
+          LATEST_SECRET=$(aws secretsmanager list-secrets --query 'SecretList[?starts_with(Name, `url-shortener-stage-db-pass-`)].Name' --output text | tr '\t' '\n' | sort -V | tail -n 1)
+          
           helm upgrade --install staging-app ./helm/url-shortener \
             -f ./helm/url-shortener/values.yaml \
             -f ./helm/url-shortener/values-staging.yaml \
             --set image.repository=$REGISTRY/$REPOSITORY \
             --set image.tag=${{ github.sha }} \
+            --set secrets.aws_secret_name=$LATEST_SECRET \
             --namespace staging \
             --create-namespace --wait --timeout 5m
 
@@ -228,17 +250,23 @@ jobs:
           mask-password: 'true'
 
       - name: Update Kubeconfig
-        run: aws eks update-kubeconfig --region eu-central-1 --name url-shortener-prod
+        run: |
+          aws eks update-kubeconfig --region eu-central-1 --name url-shortener-prod
+          kubectl create namespace prod --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespace prod istio-injection=enabled --overwrite
 
       - name: Deploy to Production with Helm
         run: |
           REGISTRY="${{ steps.login-ecr-prod.outputs.registry }}"
           REPOSITORY="url-shortener-prod-repo"
           
+          LATEST_SECRET=$(aws secretsmanager list-secrets --query 'SecretList[?starts_with(Name, `url-shortener-prod-db-pass-`)].Name' --output text | tr '\t' '\n' | sort -V | tail -n 1)
+          
           helm upgrade --install prod-app ./helm/url-shortener \
             -f ./helm/url-shortener/values.yaml \
             -f ./helm/url-shortener/values-production.yaml \
             --set image.repository=$REGISTRY/$REPOSITORY \
             --set image.tag=${{ github.sha }} \
+            --set secrets.aws_secret_name=$LATEST_SECRET \
             --namespace prod \
-            --create-namespace --wait --timeout 5m      
+            --create-namespace --wait --timeout 5m

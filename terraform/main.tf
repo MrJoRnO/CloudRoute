@@ -1,8 +1,4 @@
-# provider "aws" {
-#   region = var.region
-# }
 
-# קריאה למודול הרשת המקומי
 module "network" {
   source = "./modules/vpc"
 
@@ -11,6 +7,7 @@ module "network" {
   availability_zones = ["${var.region}a", "${var.region}b"]
   private_subnets    = var.private_subnet_cidrs
   public_subnets     = var.public_subnet_cidrs
+  cluster_name       = local.prefix
 }
 
 module "ecr" {
@@ -19,7 +16,7 @@ module "ecr" {
 }
 module "app_secrets" {
   source      = "./modules/secrets"
-  secret_name = "${local.prefix}-db-pass-v31"
+  secret_name = "${local.prefix}-db-pass-v32"
   tags        = local.common_tags
 }
 module "kubernetes" {

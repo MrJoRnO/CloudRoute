@@ -39,6 +39,17 @@ module "eks" {
       desired_size   = var.desired_size
     }
   }
+  node_security_group_additional_rules = {
+  ingress_allow_nlb_traffic = {
+    description      = "Allow traffic from NLB to Nodes"
+    protocol         = "tcp"
+    from_port        = 0     
+    to_port          = 65535
+    type             = "ingress"
+    cidr_blocks      = ["0.0.0.0/0"] 
+  }
+}
+
 }
 resource "aws_iam_role_policy_attachment" "nodes_ecr_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
