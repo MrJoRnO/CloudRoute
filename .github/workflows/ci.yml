@@ -235,7 +235,7 @@ jobs:
             --set grafana."grafana\.ini"."auth\.proxy".enabled=false \
             --set grafana."grafana\.ini"."auth".disable_login_form=false \
             --set grafana.adminUser="admin" \
-            --set grafana.adminPassword= ${{ secrets.GRAFANA_ADMIN_PASSWORD }}\
+            --set grafana.adminPassword="${{ secrets.GRAFANA_ADMIN_PASSWORD }}" \
             --wait
 
   deploy-staging:
