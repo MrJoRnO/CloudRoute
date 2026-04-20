@@ -198,21 +198,21 @@ jobs:
             --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-nlb-target-type"="instance" \
             --wait --timeout 15m
           # 4. OAuth2 Proxy
-          LB_HOST=$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          echo "Found NLB ADDRESS: $LB_HOST"
-          helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy \
-            --namespace istio-system \
-            --set config.clientID=${{ secrets.OAUTH_CLIENT_ID }} \
-            --set config.clientSecret=${{ secrets.OAUTH_CLIENT_SECRET }} \
-            --set config.cookieSecret=${{ secrets.OAUTH_COOKIE_SECRET }} \
-            --set extraArgs.provider=github \
-            --set extraArgs.github-user="" \
-            --set extraArgs.email-domain="*" \
-            --set extraArgs.redirect-url="https://$LB_HOST/oauth2/callback" \
-            --set extraArgs.cookie-domain="$LB_HOST" \
-            --set extraArgs.cookie-secure=false \
-            --set extraArgs.upstream=file:///dev/null \
-            --set extraArgs.http-address=0.0.0.0:4180
+          # LB_HOST=$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          # echo "Found NLB ADDRESS: $LB_HOST"
+          # helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy \
+          #   --namespace istio-system \
+          #   --set config.clientID=${{ secrets.OAUTH_CLIENT_ID }} \
+          #   --set config.clientSecret=${{ secrets.OAUTH_CLIENT_SECRET }} \
+          #   --set config.cookieSecret=${{ secrets.OAUTH_COOKIE_SECRET }} \
+          #   --set extraArgs.provider=github \
+          #   --set extraArgs.github-user="" \
+          #   --set extraArgs.email-domain="*" \
+          #   --set extraArgs.redirect-url="https://$LB_HOST/oauth2/callback" \
+          #   --set extraArgs.cookie-domain="$LB_HOST" \
+          #   --set extraArgs.cookie-secure=false \
+          #   --set extraArgs.upstream=file:///dev/null \
+          #   --set extraArgs.http-address=0.0.0.0:4180
           
       - name: Install Monitoring Stack
         run: |
@@ -225,7 +225,8 @@ jobs:
             --namespace monitoring --create-namespace \
             --set grafana."grafana\.ini".server.root_url="https://$LB_HOST/grafana/" \
             --set grafana."grafana\.ini".server.serve_from_sub_path=true \
-            --wait --timeout 15m
+            --set grafana."grafana\.ini".server.domain="$LB_HOST" \
+            --wait 
 
   deploy-staging:
     name: Deploy to Staging

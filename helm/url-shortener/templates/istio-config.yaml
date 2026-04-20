@@ -38,14 +38,6 @@ spec:
   http:
   - match:
     - uri:
-        prefix: /oauth2
-    route:
-    - destination:
-        host: oauth2-proxy.istio-system.svc.cluster.local
-        port:
-          number: 4180
-  - match:
-    - uri:
         prefix: /grafana
     route:
     - destination:
