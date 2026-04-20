@@ -217,7 +217,7 @@ jobs:
       - name: Install Monitoring Stack
         run: |
           kubectl delete authorizationpolicy require-oauth2 -n istio-system --ignore-not-found
-          
+          kubectl delete secret monitoring-grafana -n monitoring --ignore-not-found
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
           helm repo update
           
@@ -236,6 +236,8 @@ jobs:
             --set grafana."grafana\.ini".server.domain="$LB_HOST" \
             --set grafana."grafana\.ini"."auth\.proxy".enabled=false \
             --set grafana."grafana\.ini"."auth".disable_login_form=false \
+            --set grafana.adminUser="admin" \
+            --set grafana.adminPassword= ${{ secrets.GRAFANA_ADMIN_PASSWORD }}\
             --wait
 
   deploy-staging:
