@@ -250,7 +250,7 @@ jobs:
           
           LATEST_SECRET=$(aws secretsmanager list-secrets --query 'SecretList[?starts_with(Name, `url-shortener-stage-db-pass-`)].Name' --output text | tr '\t' '\n' | sort -V | tail -n 1)
           echo "Found latest secret: $LATEST_SECRET"
-
+          helm uninstall staging-app -n staging --ignore-not-found    
           helm upgrade --install staging-app ./helm/url-shortener \
             -f ./helm/url-shortener/values.yaml \
             -f ./helm/url-shortener/values-staging.yaml \
