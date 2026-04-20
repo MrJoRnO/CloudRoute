@@ -209,7 +209,7 @@ jobs:
           helm repo update
           
           LB_HOST=$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          
+          echo "Found NLB ADDRESS: $LB_HOST"
           helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
             --namespace monitoring --create-namespace \
             --set grafana."grafana\.ini".server.root_url="https://$LB_HOST/grafana/" \
