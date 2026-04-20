@@ -216,8 +216,6 @@ jobs:
           
       - name: Install Monitoring Stack
         run: |
-          kubectl delete authorizationpolicy require-oauth2 -n istio-system --ignore-not-found
-          kubectl delete secret monitoring-grafana -n monitoring --ignore-not-found
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
           helm repo update
           
