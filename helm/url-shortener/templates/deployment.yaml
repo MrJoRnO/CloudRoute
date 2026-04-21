@@ -26,6 +26,10 @@ spec:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts: 
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
           envFrom:
             - configMapRef:
                 name: {{ include "url-shortener.fullname" . }}-config
@@ -48,3 +52,11 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "url-shortener.fullname" . }}-aws-secrets
